@@ -1,0 +1,20 @@
+# Web & API
+fastapi
+uvicorn
+httpx
+pydantic
+
+# OpenAI API
+openai
+
+# ONNX Runtime (for production / offline embeddings)
+onnxruntime>=1.19.0
+
+# Transformers & tokenization (for ONNX tokenizer support)
+transformers>=4.40.0
+
+# Math & array processing
+numpy>=1.26.0
+
+# Environment config (handy for local .env setup)
+python-dotenv>=1.0.1

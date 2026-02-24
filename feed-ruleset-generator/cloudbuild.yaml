@@ -1,0 +1,58 @@
+# cloudbuild.yaml
+# Build, push, and deploy the feed-ruleset-generator to Cloud Run
+
+steps:
+  # Step 0: Create Artifact Registry repository (if it doesn't exist)
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        gcloud artifacts repositories create feed-ruleset-generator \
+          --repository-format=docker \
+          --location=us-central1 \
+          --description="Feed ruleset generator Docker images" \
+          2>/dev/null || echo "Repository already exists"
+
+  # Step 1: Build the Docker image
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "build",
+        "-t",
+        "us-central1-docker.pkg.dev/$PROJECT_ID/feed-ruleset-generator/app:$COMMIT_SHA",
+        "-f",
+        "feed-ruleset-generator/Dockerfile",
+        "feed-ruleset-generator",
+      ]
+
+  # Step 2: Push the image to Artifact Registry
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "push",
+        "us-central1-docker.pkg.dev/$PROJECT_ID/feed-ruleset-generator/app:$COMMIT_SHA",
+      ]
+
+  # Step 3: Deploy to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        echo "Deploying to Cloud Run..."
+        gcloud run deploy feed-ruleset-generator \
+          --image us-central1-docker.pkg.dev/$PROJECT_ID/feed-ruleset-generator/app:$COMMIT_SHA \
+          --region us-central1 \
+          --platform managed \
+          --memory 2Gi \
+          --allow-unauthenticated \
+          --port 8080 \
+          --timeout 600 \
+          --set-env-vars API_KEY=$_API_KEY,OPENAI_API_KEY=$_OPENAI_API_KEY
+
+images:
+  - "us-central1-docker.pkg.dev/$PROJECT_ID/feed-ruleset-generator/app:$COMMIT_SHA"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
