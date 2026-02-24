@@ -55,7 +55,7 @@ def cosine_similarity(a, b):
     """Calculate cosine similarity between two vectors."""
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-async def fetch_recent_posts(client: httpx.AsyncClient, did: str, limit: int = 3) -> list[str]:
+async def fetch_recent_posts(client: httpx.AsyncClient, did: str, limit: int = 2) -> list[str]:
     """Fetch recent posts from an account."""
     url = f"{BSKY_API_BASE}/app.bsky.feed.getAuthorFeed"
     params = {"actor": did, "limit": limit}
@@ -79,7 +79,7 @@ async def fetch_recent_posts(client: httpx.AsyncClient, did: str, limit: int = 3
         print(f"  ❌ Error fetching posts for {did[:20]}...: {e}")
         return []
 
-async def fetch_and_score_authors(client: httpx.AsyncClient, query: str, limit: int = 5) -> list[tuple[str, float, list[float]]]:
+async def fetch_and_score_authors(client: httpx.AsyncClient, query: str, limit: int = 3) -> list[tuple[str, float, list[float]]]:
     """
     Search for actors using Bluesky API, then rank them by cosine similarity
     of their recent posts to the query. Returns list of (DID, score, embedding).
@@ -105,34 +105,52 @@ async def fetch_and_score_authors(client: httpx.AsyncClient, query: str, limit: 
         # Get query embedding - already normalized by encode_onnx
         query_embedding = encode_onnx(query)[0]
         
-        # Fetch posts for all actors in parallel
-        async def score_actor(actor):
-            did = actor.get("did")
-            if not did:
-                return None
-            
-            posts = await fetch_recent_posts(client, did, limit=3)
-            if not posts:
-                return None
-            
-            # Concatenate posts and create single embedding
-            concat_posts = " ".join(posts)
-            account_embedding = encode_onnx(concat_posts)[0]
-            
+        # Limit concurrent requests to avoid overwhelming the API
+        semaphore = asyncio.Semaphore(5)
+        
+        # Fetch posts for all actors in parallel with concurrency limit
+        async def fetch_actor_posts(actor):
+            async with semaphore:
+                did = actor.get("did")
+                if not did:
+                    return None
+                
+                posts = await fetch_recent_posts(client, did, limit=2)
+                if not posts:
+                    return None
+                
+                # Concatenate posts
+                concat_posts = " ".join(posts)
+                return (did, concat_posts)
+        
+        # Fetch all posts in parallel
+        results = await asyncio.gather(*[fetch_actor_posts(actor) for actor in actors])
+        actor_posts = [r for r in results if r is not None]
+        
+        if not actor_posts:
+            print(f"  ⚠️  No actors with posts found")
+            return []
+        
+        print(f"  → Fetched posts from {len(actor_posts)}/{len(actors)} actors")
+        
+        # Batch encode all concatenated posts at once (much faster than individual encoding)
+        dids = [did for did, _ in actor_posts]
+        all_posts = [posts for _, posts in actor_posts]
+        account_embeddings = encode_onnx(all_posts)  # Batch encoding
+        
+        # Compute similarities for all accounts
+        actor_data = []
+        for did, embedding in zip(dids, account_embeddings):
             # Both embeddings are already normalized, so dot product = cosine similarity
-            similarity = float(np.dot(query_embedding, account_embedding))
-            
-            return (did, similarity, account_embedding.tolist())
+            similarity = float(np.dot(query_embedding, embedding))
+            if similarity > 0:  # Filter negative scores early
+                actor_data.append((did, similarity, embedding.tolist()))
         
-        # Fetch and score all actors in parallel
-        results = await asyncio.gather(*[score_actor(actor) for actor in actors])
-        actor_data = [r for r in results if r is not None]
-        
-        print(f"  → Kept {len(actor_data)}/{len(actors)} actors with posts")
+        print(f"  → Kept {len(actor_data)} actors with positive scores")
         
         # Sort by similarity score (descending)
         actor_data.sort(key=lambda x: x[1], reverse=True)
-        return actor_data[:3]  # Return top 3
+        return actor_data[:2]  # Return top 2
         
     except Exception as e:
         print(f"  ❌ Error in fetch_and_score_authors: {e}")
@@ -216,8 +234,8 @@ async def generate_feed_ruleset(query: str) -> dict:
     print(f"Searching for accounts matching topics: {', '.join(topic_queries)}\n")
     
     async with httpx.AsyncClient(timeout=30.0) as client:
-        # Search for each topic in parallel, get top 3 accounts per topic
-        results = await asyncio.gather(*[fetch_and_score_authors(client, topic, limit=5) for topic in topic_queries])
+        # Search for each topic in parallel, get top 3 accounts per topic (reduced from 5)
+        results = await asyncio.gather(*[fetch_and_score_authors(client, topic, limit=3) for topic in topic_queries])
     
     # Collect all unique accounts with their best scores and embeddings
     account_map = {}  # did -> (best_score, embedding)
@@ -226,13 +244,13 @@ async def generate_feed_ruleset(query: str) -> dict:
             if did not in account_map or score > account_map[did][0]:
                 account_map[did] = (score, embedding)
     
-    # Convert to sorted list
-    all_accounts = [(did, score, emb) for did, (score, emb) in account_map.items()]
+    # Convert to sorted list and filter out negative or zero scores
+    all_accounts = [(did, score, emb) for did, (score, emb) in account_map.items() if score > 0]
     all_accounts.sort(key=lambda x: x[1], reverse=True)
     
-    print(f"✓ Found {len(all_accounts)} unique accounts across all topics\n")
+    print(f"✓ Found {len(all_accounts)} unique accounts with positive scores across all topics\n")
     
-    # Add profile_preferences with scores
+    # Add profile_preferences with scores (only positive scores)
     if all_accounts:
         feed_fields["profile_preferences"] = [
             {
