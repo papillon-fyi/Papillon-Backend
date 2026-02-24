@@ -79,35 +79,21 @@ python3 generate_feed_ruleset.py
 
 This service is designed for automatic deployment to Cloud Run via Cloud Build triggers.
 
-### Prerequisites
+### Step 1: Enable Required APIs
 
-- Google Cloud project with billing enabled
-- Required APIs enabled:
-  ```bash
-  gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
-  ```
-- GitHub repository connected to Cloud Build via Developer Connect
+Go to **APIs & Services → Library** and enable:
 
-### Cloud Build Trigger Setup
+- **Cloud Run API**
+- **Cloud Build API**
+- **Artifact Registry API**
 
-1. Go to **Cloud Build → Triggers → Create Trigger**
-2. Configure the trigger:
+Or via command line:
 
-| Field                           | Value                                         |
-| ------------------------------- | --------------------------------------------- |
-| **Name**                        | `deploy-feed-ruleset-generator`               |
-| **Region**                      | `global`                                      |
-| **Description**                 | Deploy feed ruleset generator on push to main |
-| **Event**                       | `Push to a branch`                            |
-| **Repository**                  | Your GitHub repo (via Developer Connect)      |
-| **Branch**                      | `^main$`                                      |
-| **Included files filter**       | `feed-ruleset-generator/**` (optional)        |
-| **Configuration Type**          | `Cloud Build configuration file (yaml/json)`  |
-| **Cloud Build config location** | `feed-ruleset-generator/cloudbuild.yaml`      |
+```bash
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
+```
 
-### Setup: Create Repository and Grant Permissions
-
-#### 1. Create Artifact Registry Repository
+### Step 2: Create Artifact Registry Repository
 
 1. Go to: **Artifact Registry → Create Repository**
 2. Configure:
@@ -117,34 +103,56 @@ This service is designed for automatic deployment to Cloud Run via Cloud Build t
    - **Region**: `us-central1` (or your preferred region)
 3. Click **Create**
 
-#### 2. Grant Cloud Build Service Account Access
+### Step 3: Create Cloud Build Trigger
 
-1. Go to: **Cloud Build → Settings → Service account**
-2. Copy the service account email (e.g., `123456789012@cloudbuild.gserviceaccount.com`)
-3. Go to: **IAM & Admin → IAM**
-4. Click **Grant Access**
-5. Paste the Cloud Build service account email
-6. Assign role: **Artifact Registry Writer**
-7. Click **Save**
+1. Go to **Cloud Build → Triggers → Create Trigger**
+2. Connect your GitHub repository (via Developer Connect if needed)
+3. Configure the trigger:
 
-This gives the Cloud Build service account permission to push images to all Artifact Registry repositories in your project.
+| Field                           | Value                                         |
+| ------------------------------- | --------------------------------------------- |
+| **Name**                        | `deploy-feed-ruleset-generator`               |
+| **Region**                      | `global`                                      |
+| **Description**                 | Deploy feed ruleset generator on push to main |
+| **Event**                       | `Push to a branch`                            |
+| **Repository**                  | Your GitHub repo                              |
+| **Branch**                      | `^main$`                                      |
+| **Included files filter**       | `feed-ruleset-generator/**`                   |
+| **Configuration Type**          | `Cloud Build configuration file (yaml/json)`  |
+| **Cloud Build config location** | `feed-ruleset-generator/cloudbuild.yaml`      |
 
-### Environment Variables (Substitution Variables)
+4. Under **Advanced → Substitution variables**, add:
 
-In the trigger settings, go to **Advanced → Substitution variables** and add:
+| Variable name     | Value               |
+| ----------------- | ------------------- |
+| `_API_KEY`        | your-secret-api-key |
+| `_OPENAI_API_KEY` | sk-your-openai-key  |
 
-| Variable name     | Purpose                     | Example               |
-| ----------------- | --------------------------- | --------------------- |
-| `_API_KEY`        | API authentication          | `your-secret-api-key` |
-| `_OPENAI_API_KEY` | GPT access for feed parsing | `sk-your-openai-key`  |
+### Step 4: Grant Cloud Build Permissions
 
-These are securely injected into Cloud Run via `cloudbuild.yaml`:
+1. Go to: **Cloud Build → Settings**
+2. Under **Service account permissions**, enable these roles:
 
-```yaml
---set-env-vars API_KEY=$_API_KEY,OPENAI_API_KEY=$_OPENAI_API_KEY
+| Service           | Role                        |
+| ----------------- | --------------------------- |
+| Artifact Registry | Artifact Registry Writer    |
+| Cloud Build       | Cloud Build Service Account |
+| Cloud Run         | Cloud Run Admin             |
+| Cloud Storage     | Storage Admin               |
+| Logging           | Logs Writer                 |
+| Logging           | Logs Configuration Writer   |
+
+### Step 5: Deploy
+
+Push your code to the `main` branch on GitHub:
+
+```bash
+git add .
+git commit -m "Deploy feed ruleset generator"
+git push origin main
 ```
 
-> ⚠️ **Never commit secrets to GitHub**. Use Cloud Build substitution variables.
+This will automatically trigger the Cloud Build pipeline and deploy your service to Cloud Run. Check **Cloud Build → History** to monitor the deployment progress.
 
 ---
 
