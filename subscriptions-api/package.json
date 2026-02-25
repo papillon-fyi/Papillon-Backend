@@ -1,0 +1,9 @@
+{
+  "name": "papillon-subscriptions-api",
+  "version": "1.0.0",
+  "description": "Papillon Subscriptions API for managing user subscription tiers with Stripe",
+  "dependencies": {
+    "aws-sdk": "^2.1313.0",
+    "stripe": "^15.7.0"
+  }
+}

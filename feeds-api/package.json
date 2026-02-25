@@ -1,0 +1,8 @@
+{
+  "name": "papillon-feeds-api",
+  "version": "1.0.0",
+  "description": "Papillon Feeds API for DynamoDB feed management",
+  "dependencies": {
+    "aws-sdk": "^2.1313.0"
+  }
+}

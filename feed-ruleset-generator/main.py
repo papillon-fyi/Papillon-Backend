@@ -25,7 +25,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-API_KEY = os.getenv("API_KEY")
+PAPILLON_API_KEY = os.getenv("PAPILLON_API_KEY")
 
 class IntentRequest(BaseModel):
     query: str
@@ -33,7 +33,7 @@ class IntentRequest(BaseModel):
 @app.get("/api/health")
 async def hello(request: Request):
     key = request.headers.get("x-api-key")
-    if key != API_KEY:
+    if key != PAPILLON_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
     return {"message": "Hello world!"}
 
@@ -41,7 +41,7 @@ async def hello(request: Request):
 @app.post("/api/generate-feed-ruleset")
 async def generate_ruleset(request: Request, body: IntentRequest):
     key = request.headers.get("x-api-key")
-    if key != API_KEY:
+    if key != PAPILLON_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     try:

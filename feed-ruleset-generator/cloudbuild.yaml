@@ -49,7 +49,7 @@ steps:
           --allow-unauthenticated \
           --port 8080 \
           --timeout 600 \
-          --set-env-vars API_KEY=$_API_KEY,OPENAI_API_KEY=$_OPENAI_API_KEY
+          --set-env-vars PAPILLON_API_KEY=$_PAPILLON_API_KEY,OPENAI_API_KEY=$_OPENAI_API_KEY
 
 images:
   - "us-central1-docker.pkg.dev/$PROJECT_ID/feed-ruleset-generator/app:$COMMIT_SHA"

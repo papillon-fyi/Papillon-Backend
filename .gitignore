@@ -1,6 +1,3 @@
-# Feed manager - not ready for production yet
-feed-manager/
-
 # Python
 __pycache__/
 *.py[cod]
