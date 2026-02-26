@@ -4,7 +4,7 @@ AWS.config.update({
 });
 const util = require("../utils/util");
 const dynamodb = new AWS.DynamoDB.DocumentClient();
-const accountsTable = "papillon-accounts";
+const feedsTable = "papillon-feeds";
 const subscriptionsTable = "papillon-subscriptions";
 
 /**
@@ -16,7 +16,7 @@ const getFeeds = async (did) => {
   }
 
   const params = {
-    TableName: accountsTable,
+    TableName: feedsTable,
     Key: { did },
   };
 
@@ -46,7 +46,7 @@ const getFeed = async (did, feedId) => {
   }
 
   const params = {
-    TableName: accountsTable,
+    TableName: feedsTable,
     Key: { did },
   };
 
@@ -84,7 +84,7 @@ const updateRuleset = async (did, feedId, rulesetData) => {
   }
 
   const params = {
-    TableName: accountsTable,
+    TableName: feedsTable,
     Key: { did },
     UpdateExpression:
       "SET feeds.#feedId.ruleset = :ruleset, updatedAt = :updatedAt",
@@ -127,7 +127,7 @@ const updateCache = async (did, feedId, cacheData) => {
   }
 
   const params = {
-    TableName: accountsTable,
+    TableName: feedsTable,
     Key: { did },
     UpdateExpression:
       "SET feeds.#feedId.#cache = :cache, updatedAt = :updatedAt",
@@ -167,7 +167,7 @@ const initializeUser = async (did) => {
   // Check if user already exists
   const existingUser = await dynamodb
     .get({
-      TableName: accountsTable,
+      TableName: feedsTable,
       Key: { did },
     })
     .promise();
@@ -184,7 +184,7 @@ const initializeUser = async (did) => {
 
   // Create account with default feed
   const accountParams = {
-    TableName: accountsTable,
+    TableName: feedsTable,
     Item: {
       did,
       feeds: {

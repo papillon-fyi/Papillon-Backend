@@ -35,7 +35,7 @@ async def hello(request: Request):
     key = request.headers.get("x-api-key")
     if key != PAPILLON_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
-    return {"message": "Hello world!"}
+    return {"message": "Hello world! - Papillon Feed Ruleset Generator is healthy."}
 
 
 @app.post("/api/generate-feed-ruleset")

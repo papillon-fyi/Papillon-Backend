@@ -6,43 +6,51 @@ const subscriptionsPath = "/subscriptions";
 
 exports.handler = async (event) => {
   let response;
+
+  const method = event.httpMethod;
+
+  // Use proxy path when available (REST API with /{proxy+})
+  const path = event.pathParameters?.proxy
+    ? "/" + event.pathParameters.proxy
+    : event.path;
+
+  // Handle CORS preflight OPTIONS requests
+  if (method === "OPTIONS") {
+    return util.buildResponse(200, {});
+  }
+
   switch (true) {
-    case event.httpMethod === "GET" && event.path === healthPath:
+    case method === "GET" && path === healthPath:
       response = util.buildResponse(200, { status: "healthy" });
       break;
 
-    // Get subscription for a DID
-    case event.httpMethod === "GET" &&
-      event.path.match(/^\/subscriptions\/[^/]+$/):
-      const did = event.path.slice(subscriptionsPath.length + 1);
+    // GET /subscriptions/{did}
+    case method === "GET" && /^\/subscriptions\/[^/]+$/.test(path): {
+      const did = path.slice(subscriptionsPath.length + 1);
       response = await subscriptionsService.getSubscription(did);
       break;
+    }
 
-    // Upgrade subscription
-    case event.httpMethod === "POST" &&
-      event.path.match(/^\/subscriptions\/[^/]+\/upgrade$/):
-      const upgradeDid = event.path
-        .slice(subscriptionsPath.length + 1)
-        .split("/")[0];
-      const upgradeBody = JSON.parse(event.body);
-      response = await subscriptionsService.upgrade(upgradeDid, upgradeBody);
+    // POST /subscriptions/{did}/upgrade
+    case method === "POST" && /^\/subscriptions\/[^/]+\/upgrade$/.test(path): {
+      const parts = path.slice(subscriptionsPath.length + 1).split("/");
+      const body = JSON.parse(event.body || "{}");
+      response = await subscriptionsService.upgrade(parts[0], body);
       break;
+    }
 
-    // Downgrade subscription
-    case event.httpMethod === "POST" &&
-      event.path.match(/^\/subscriptions\/[^/]+\/downgrade$/):
-      const downgradeDid = event.path
-        .slice(subscriptionsPath.length + 1)
-        .split("/")[0];
-      const downgradeBody = JSON.parse(event.body);
-      response = await subscriptionsService.downgrade(
-        downgradeDid,
-        downgradeBody,
-      );
+    // POST /subscriptions/{did}/downgrade
+    case method === "POST" &&
+      /^\/subscriptions\/[^/]+\/downgrade$/.test(path): {
+      const parts = path.slice(subscriptionsPath.length + 1).split("/");
+      const body = JSON.parse(event.body || "{}");
+      response = await subscriptionsService.downgrade(parts[0], body);
       break;
+    }
 
     default:
       response = util.buildResponse(404, { message: "404 not found" });
   }
+
   return response;
 };
