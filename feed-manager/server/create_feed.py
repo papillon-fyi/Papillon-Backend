@@ -7,7 +7,7 @@ import json
 
 def create_feed(handle, password, hostname, record_name, display_name="", description="",
                 avatar_path=os.path.join(os.path.dirname(__file__), "avatar.png"),
-                blueprint=None, original_prompt=None, accessJwt=None):
+                blueprint=None, original_prompt=None, access_jwt=None):
     client = Client()
     client.login(handle, password)
 
@@ -52,7 +52,7 @@ def create_feed(handle, password, hostname, record_name, display_name="", descri
         "description": description,
         "avatar_path": avatar_path,
         "ranking_weights": ranking_weights_json,
-        "access_jwt": accessJwt,
+        "access_jwt": access_jwt,
     }
 
     feed, created = Feed.get_or_create(

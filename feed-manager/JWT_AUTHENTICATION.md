@@ -2,7 +2,7 @@
 
 ## Overview
 
-Updated the feed-manager to accept and use Bluesky `accessJwt` tokens for authenticated API searches, replacing the deprecated custom API.
+Updated the feed-manager to accept and use Bluesky `access_jwt` tokens for authenticated API searches, replacing the deprecated custom API.
 
 ## Changes Made
 
@@ -13,12 +13,12 @@ Updated the feed-manager to accept and use Bluesky `accessJwt` tokens for authen
 
 ### 2. API Endpoint (`app.py`)
 
-- Added `"accessJwt"` to `allowed_keys` list
+- Added `"access_jwt"` to `allowed_keys` list
 - JWT is now accepted in POST requests to `/manage-feed` endpoint
 
 ### 3. Feed Creation (`create_feed.py`)
 
-- Updated function signature to accept `accessJwt` parameter
+- Updated function signature to accept `access_jwt` parameter
 - JWT is stored in Feed record during creation/update
 - Added `access_jwt` to the fields that get updated when feed already exists
 
@@ -35,7 +35,7 @@ Updated the feed-manager to accept and use Bluesky `accessJwt` tokens for authen
 - `search_vector()`: Now uses Bluesky's `app.bsky.feed.searchPosts` API with JWT authentication
 - `search_text()`: Now uses Bluesky's `app.bsky.feed.searchPosts` API with JWT authentication
 - Both functions accept `access_jwt` parameter (defaults to None)
-- Both functions add `Authorization: Bearer {accessJwt}` header to requests
+- Both functions add `Authorization: Bearer {access_jwt}` header to requests
 
 #### Feed Building
 
@@ -62,7 +62,7 @@ Created `migrate_add_access_jwt.py`:
   "record_name": "my-feed",
   "display_name": "My Feed",
   "description": "Feed description",
-  "accessJwt": "eyJ0eXAiOiJhdCt...",  // NEW
+  "access_jwt": "eyJ0eXAiOiJhdCt...",  // NEW
   "original_prompt": "I want posts about...",
   "blueprint": {
     "profile_preferences": [...],
@@ -75,7 +75,7 @@ Created `migrate_add_access_jwt.py`:
 
 - **Endpoint**: `https://bsky.social/xrpc/app.bsky.feed.searchPosts`
 - **Method**: GET
-- **Headers**: `Authorization: Bearer {accessJwt}`
+- **Headers**: `Authorization: Bearer {access_jwt}`
 - **Params**: `q` (query string), `limit` (number of results)
 - **Response**: Returns posts array with post objects
 
@@ -90,7 +90,7 @@ Created `migrate_add_access_jwt.py`:
 ## Migration Steps
 
 1. Run migration script: `python feed-manager/migrate_add_access_jwt.py`
-2. Update frontend to include `accessJwt` in feed creation requests
+2. Update frontend to include `access_jwt` in feed creation requests
 3. Remove `CUSTOM_API_URL` from environment variables (no longer needed)
 
 ## Notes
