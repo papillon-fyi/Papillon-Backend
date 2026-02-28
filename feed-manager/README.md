@@ -180,6 +180,7 @@ sudo pip3 install --upgrade --force-reinstall --ignore-installed \
     transformers \
     fastapi \
     uvicorn \
+    openai \
     --break-system-packages
 ```
 
@@ -303,6 +304,8 @@ sudo journalctl -u caddy -f
 
 Caddy will automatically fetch SSL certificates for your domain (make sure your DNS A record points to your VM).
 
+**Troubleshooting**: If `curl https://feeds.example.com` fails with connection errors, Caddy may not be properly bound to ports 80/443. Run `sudo systemctl daemon-reload` and `sudo systemctl restart caddy` to ensure Caddy picks up the configuration, obtains the TLS certificate, and starts listening on the correct ports.
+
 ---
 
 ## Run the Service
@@ -341,7 +344,7 @@ _NOTE: It takes about 2-5 minutes for the service to fully start. If running in 
 Check for signs of life:
 
 ```bash
-curl https://feeds.papillon.fyi/xrpc/app.bsky.feed.describeFeedGenerator
+curl https://feeds.example.com/xrpc/app.bsky.feed.describeFeedGenerator
 ```
 
 Expected response:
@@ -350,7 +353,7 @@ Expected response:
 {
   "encoding": "application/json",
   "body": {
-    "did": "did:web:feeds.papillon.fyi",
+    "did": "did:web:feeds.example.com",
     "feeds": []
   }
 }

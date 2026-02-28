@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-API_KEY = os.getenv("API_KEY")
+PAPILLON_API_KEY = os.getenv("PAPILLON_API_KEY")
 logging.basicConfig(level=logging.INFO)
 
 @app.on_event("startup")
@@ -108,7 +108,7 @@ async def get_feed_skeleton(feed: str, cursor: str = None, limit: int = 20):
 @app.post("/manage-feed")
 async def create_feed_endpoint(request: Request, data: dict):
     key = request.headers.get("x-api-key")
-    if key != API_KEY:
+    if key != PAPILLON_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
     
     try:
