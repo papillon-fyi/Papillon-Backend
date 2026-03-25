@@ -4,16 +4,33 @@ from server.algos import algos
 from server.algos.feed import make_handler, detect_and_expand_acronyms
 import os
 import json
+import time
 
-def create_feed(handle, password, hostname, record_name, display_name="", description="",
-                avatar_path=os.path.join(os.path.dirname(__file__), "avatar.png"),
-                blueprint=None, original_prompt=None, access_jwt=None):
+def create_feed(handle, password, hostname, blueprint=None, access_jwt=None):
+    """
+    Create a feed on Bluesky.
+    
+    Blueprint should contain:
+    - record_name: The rkey for the feed
+    - display_name: Display name for the feed
+    - description: Description of the feed
+    - prompt: The original user prompt for the feed
+    - topic_preferences, profile_preferences, topic_filters, profile_filters
+    - ranking_weights
+    """
     client = Client()
     client.login(handle, password)
 
     feed_did = "did:web:" + hostname.split("/")[0]
     print(f"[Feed Creation] Creating feed for DID: {feed_did}")
 
+    # Extract metadata from blueprint
+    record_name = blueprint.get('record_name', str(int(time.time() * 1000))) if blueprint else str(int(time.time() * 1000))
+    display_name = blueprint.get('display_name', '') if blueprint else ''
+    description = blueprint.get('description', '') if blueprint else ''
+    prompt = blueprint.get('prompt', '') if blueprint else ''
+
+    avatar_path = os.path.join(os.path.dirname(__file__), "avatar.png")
     avatar_blob = None
     if avatar_path and os.path.exists(avatar_path):
         with open(avatar_path, 'rb') as f:
@@ -44,12 +61,16 @@ def create_feed(handle, password, hostname, record_name, display_name="", descri
     if blueprint and "ranking_weights" in blueprint:
         ranking_weights_json = json.dumps(blueprint["ranking_weights"])
 
+    # Define avatar_path
+    avatar_path = os.path.join(os.path.dirname(__file__), "avatar.png")
+
     # Save feed metadata locally
     data = {
         "handle": handle,
         "record_name": record_name,
         "display_name": display_name,
         "description": description,
+        "prompt": prompt,
         "avatar_path": avatar_path,
         "ranking_weights": ranking_weights_json,
         "access_jwt": access_jwt,
@@ -62,7 +83,7 @@ def create_feed(handle, password, hostname, record_name, display_name="", descri
 
     if not created:
         updated = False
-        for field in ["handle", "record_name", "display_name", "description", "avatar_path", "ranking_weights", "access_jwt"]:
+        for field in ["handle", "record_name", "display_name", "description", "prompt", "avatar_path", "ranking_weights", "access_jwt"]:
             value = data.get(field)
             if value and getattr(feed, field) != value:
                 setattr(feed, field, value)
@@ -77,8 +98,8 @@ def create_feed(handle, password, hostname, record_name, display_name="", descri
 
         # Detect and expand acronyms in topic preferences
         topic_preferences = blueprint.get('topic_preferences', [])
-        if original_prompt:
-            topic_preferences = detect_and_expand_acronyms(topic_preferences, original_prompt)
+        if prompt:
+            topic_preferences = detect_and_expand_acronyms(topic_preferences, prompt)
 
         # Topic Preferences (positive)
         for topic in topic_preferences:

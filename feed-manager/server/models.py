@@ -8,6 +8,7 @@ class Feed(Model):
     record_name = TextField()
     display_name = TextField()
     description = TextField(null=True)
+    prompt = TextField(null=True)  # Original user prompt that generated this feed
     avatar_path = TextField(null=True)
     ranking_weights = TextField(null=True)  # JSON string of ranking weights
     blueprint_hash = TextField(null=True)  # Hash of sources + ranking_weights to detect blueprint changes

@@ -61,7 +61,7 @@ async def get_cache_from_api(cache_key: str, cache_type: str) -> dict:
         cache_type: Type of cache ('search' or 'feed')
     
     Returns:
-        dict with cached data, or None if not found
+        dict with 'cache' (list of post URIs) and 'blueprint' (feed config), or None if not found
     """
     if cache_type == 'feed':
         # cache_key is the feed_uri (at://did/app.bsky.feed.generator/feedId)
@@ -69,13 +69,16 @@ async def get_cache_from_api(cache_key: str, cache_type: str) -> dict:
         if not did or not feed_id:
             return None
         
+        # Use ${did}-papillon-feed as the cache key
+        cache_key_format = f"{did}-papillon-feed"
+        
         try:
             headers = {"x-api-key": PAPILLON_API_KEY} if PAPILLON_API_KEY else {}
             async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(f"{FEEDS_API_BASE}/feeds/{did}/{feed_id}", headers=headers)
+                response = await client.get(f"{FEEDS_API_BASE}/feeds/{did}/{cache_key_format}", headers=headers)
                 if response.status_code == 200:
                     feed_data = response.json()
-                    # Return the cache object if it exists
+                    # Return the entire cache structure (has 'cache' and 'blueprint' keys)
                     if 'cache' in feed_data:
                         return feed_data.get('cache')
                 return None
@@ -94,7 +97,7 @@ async def set_cache_to_api(cache_key: str, cache_type: str, data: dict, ttl: int
     Args:
         cache_key: The cache key (feed_uri for feed cache, query string for search cache)
         cache_type: Type of cache ('search' or 'feed')
-        data: The data to cache
+        data: The data to cache (should have 'cache' list and 'blueprint' dict)
         ttl: Time-to-live in seconds (optional, not used yet)
     
     Returns:
@@ -106,11 +109,14 @@ async def set_cache_to_api(cache_key: str, cache_type: str, data: dict, ttl: int
         if not did or not feed_id:
             return False
         
+        # Use ${did}-papillon-feed as the cache key
+        cache_key_format = f"{did}-papillon-feed"
+        
         try:
             headers = {"x-api-key": PAPILLON_API_KEY} if PAPILLON_API_KEY else {}
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(
-                    f"{FEEDS_API_BASE}/feeds/{did}/{feed_id}/cache",
+                    f"{FEEDS_API_BASE}/feeds/{did}/{cache_key_format}/cache",
                     json={"cache": data},
                     headers=headers
                 )
@@ -122,18 +128,18 @@ async def set_cache_to_api(cache_key: str, cache_type: str, data: dict, ttl: int
     # For search cache, we don't have a good place to store it yet
     return True
 
-def detect_and_expand_acronyms(topic_preferences: list[dict], original_prompt: str = None) -> list[dict]:
+def detect_and_expand_acronyms(topic_preferences: list[dict], prompt: str = None) -> list[dict]:
     """
     Use LLM to detect acronyms in topic preferences and expand them with semantic context.
     Returns updated topic preferences with is_acronym flag and expanded search terms.
     """
-    if not topic_preferences or not original_prompt:
+    if not topic_preferences or not prompt:
         return topic_preferences
     
     topic_names = [t['name'] for t in topic_preferences]
     
-    prompt = f"""Given this user's feed intent:
-"{original_prompt}"
+    llm_prompt = f"""Given this user's feed intent:
+"{prompt}"
 
 And these extracted topic preferences: {', '.join(topic_names)}
 
@@ -161,7 +167,11 @@ For regular terms, keep the search_terms the same as name.
     try:
         response = openai.chat.completions.create(
             model="gpt-5-nano",
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": llm_prompt}],
+            response_format={ "type": "json" },
+            reasoning_effort= 'minimal',
+            temperature=0.5,
+            max_tokens=200,
         )
         
         result = json.loads(response.choices[0].message.content.strip())
@@ -185,6 +195,58 @@ For regular terms, keep the search_terms the same as name.
         print(f"[Acronym Detection Error] {e}")
         # Return original topics if LLM fails
         return [{**t, 'is_acronym': 0, 'context': None} for t in topic_preferences]
+
+async def build_blueprint_for_cache(feed_uri: str) -> dict:
+    """Build complete blueprint object for cache storage."""
+    try:
+        feed = Feed.get(Feed.uri == feed_uri)
+    except Feed.DoesNotExist:
+        return {}
+    
+    # Get all sources for this feed
+    sources = (
+        FeedSource
+        .select()
+        .where(FeedSource.feed == feed)
+        .order_by(FeedSource.source_type, FeedSource.identifier)
+    )
+    
+    # Build the blueprint structure
+    blueprint = {
+        "topic_preferences": [],
+        "topic_filters": [],
+        "profile_preferences": [],
+        "profile_filters": [],
+        "record_name": feed.record_name or "",
+        "display_name": feed.display_name or "",
+        "description": feed.description or "",
+        "prompt": getattr(feed, 'prompt', ''),
+        "ranking_weights": get_ranking_weights(feed_uri)
+    }
+    
+    for src in sources:
+        if src.source_type == "topic_preference":
+            blueprint["topic_preferences"].append({
+                "name": src.identifier,
+                "weight": src.weight
+            })
+        elif src.source_type == "topic_filter":
+            blueprint["topic_filters"].append({
+                "name": src.identifier,
+                "weight": src.weight
+            })
+        elif src.source_type == "profile_preference":
+            blueprint["profile_preferences"].append({
+                "did": src.identifier,
+                "weight": src.weight
+            })
+        elif src.source_type == "profile_filter":
+            blueprint["profile_filters"].append({
+                "did": src.identifier,
+                "weight": src.weight
+            })
+    
+    return blueprint
 
 def compute_blueprint_hash(feed_uri: str) -> str:
     """Compute a deterministic hash of the feed blueprint (sources + ranking_weights)."""
@@ -655,27 +717,28 @@ def make_handler(feed_uri: str):
         if filtered_posts:
             oldest_timestamp = int(min(p["timestamp"] for p in filtered_posts))
 
-        # Format for Bluesky
-        feed = {
-            "cursor": "0",
-            "feed": [{"post": p["uri"]} for p in filtered_posts[:FEED_LIMIT]]
-        }
+        # Format posts as list of URIs for cache
+        cache_posts = [{"post": p["uri"]} for p in filtered_posts[:FEED_LIMIT]]
 
-        # Compute current blueprint hash
-        current_blueprint_hash = compute_blueprint_hash(feed_uri)
+        # Build the blueprint object for cache
+        blueprint_cache = await build_blueprint_for_cache(feed_uri)
 
-        # Save to cache via API
+        # Save to cache via API with new structure
         await set_cache_to_api(
             cache_key=feed_uri,
             cache_type='feed',
             data={
-                'feed': feed,
-                'timestamp': int(time.time()),
-                'oldest_timestamp': oldest_timestamp,
-                'blueprint_hash': current_blueprint_hash
+                'cache': cache_posts,
+                'blueprint': blueprint_cache
             },
             ttl=FEED_CACHE_TTL
         )
+
+        # Format for Bluesky API response
+        feed = {
+            "cursor": "0",
+            "feed": cache_posts
+        }
 
         return feed
 
@@ -685,42 +748,29 @@ def make_handler(feed_uri: str):
         if cached is None:
             return None
 
-        # Check if blueprint has changed - if so, invalidate cache
-        current_blueprint_hash = compute_blueprint_hash(feed_uri)
-        if cached.get('blueprint_hash') != current_blueprint_hash:
+        # Check if blueprint has changed by comparing current vs cached blueprint
+        current_blueprint = await build_blueprint_for_cache(feed_uri)
+        cached_blueprint = cached.get('blueprint', {})
+        
+        # Compare blueprints (excluding metadata fields that don't affect feed generation)
+        if (current_blueprint.get('topic_preferences') != cached_blueprint.get('topic_preferences') or
+            current_blueprint.get('topic_filters') != cached_blueprint.get('topic_filters') or
+            current_blueprint.get('profile_preferences') != cached_blueprint.get('profile_preferences') or
+            current_blueprint.get('profile_filters') != cached_blueprint.get('profile_filters') or
+            current_blueprint.get('ranking_weights') != cached_blueprint.get('ranking_weights')):
             print(f"Blueprint changed for {feed_uri}, invalidating cache")
             return None
 
-        cached_feed = cached.get('feed')
-        if not cached_feed:
-            return None
-        
-        feed_items = cached_feed.get("feed", [])
+        # Get cached posts
+        feed_items = cached.get('cache', [])
         if not feed_items:
             return None
 
-        # Check if the oldest post in cache is within 48 hours using stored timestamp
-        oldest_timestamp = cached.get('oldest_timestamp')
-        if oldest_timestamp is not None:
-            if time.time() - oldest_timestamp > MAX_AGE_SECONDS:
-                return None  # Cache has stale posts
-        else:
-            # Fallback: fetch the oldest post to check timestamp (for backwards compatibility)
-            oldest_uri = feed_items[-1].get("post")
-            if oldest_uri:
-                oldest_full = await fetch_full_post(oldest_uri)
-                if oldest_full:
-                    created_at_str = oldest_full.get("record", {}).get("createdAt")
-                    if created_at_str:
-                        try:
-                            oldest_time = datetime.fromisoformat(created_at_str.replace("Z", "+00:00")).timestamp()
-                            now = datetime.now(timezone.utc).timestamp()
-                            if now - oldest_time > MAX_AGE_SECONDS:
-                                return None  # Cache has stale posts
-                        except ValueError:
-                            return None
-
-        return cached_feed
+        # Return cached feed (paginated)
+        return {
+            "cursor": "0",
+            "feed": feed_items[:limit]
+        }
 
     async def handler(cursor=None, limit=RESPONSE_LIMIT):
         # Normalize cursor to integer
@@ -738,10 +788,8 @@ def make_handler(feed_uri: str):
             cached = await serve_from_cache()
 
         else:
-            # Check if cache is over 5 minutes old, trigger background rebuild
-            cached_data = await get_cache_from_api(feed_uri, 'feed')
-            if cached_data and (time.time() - cached_data.get('timestamp', 0)) > FEED_CACHE_TTL:
-                asyncio.create_task(maybe_build_feed())  # Background rebuild
+            # Always trigger background rebuild to keep cache fresh
+            asyncio.create_task(maybe_build_feed())  # Background rebuild
 
         feed_items = cached.get("feed", [])
 
