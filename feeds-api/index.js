@@ -1,28 +1,60 @@
 const feedsService = require("./services/feeds");
-const util = require("./utils/util");
+const generateRulesetService = require("./services/generate-ruleset");
+const { buildResponse } = require("./utils/util");
 
 const healthPath = "/health";
 const feedsPath = "/feeds";
+const generateRulesetPath = "/feeds/generate-ruleset";
+const deployFeedPath = "/feeds/deploy";
 
 exports.handler = async (event) => {
-  let response;
+  // Handle OPTIONS preflight
+  if (event.httpMethod === "OPTIONS") {
+    return buildResponse(200, {});
+  }
 
-  const method = event.httpMethod;
-
-  // Use proxy path when available (REST API with /{proxy+})
+  // Get path and method
   const path = event.pathParameters?.proxy
     ? "/" + event.pathParameters.proxy
     : event.path;
+  const method = event.httpMethod;
 
-  // Handle CORS preflight OPTIONS requests
-  if (method === "OPTIONS") {
-    return util.buildResponse(200, {});
-  }
+  let response;
 
   switch (true) {
     case method === "GET" && path === healthPath:
-      response = util.buildResponse(200, { status: "healthy" });
+      response = buildResponse(200, { status: "healthy" });
       break;
+
+    // POST /feeds/generate-ruleset
+    case method === "POST" && path === generateRulesetPath: {
+      try {
+        const body = JSON.parse(event.body || "{}");
+        if (!body.query) {
+          return buildResponse(400, { error: "Query is required" });
+        }
+        const ruleset = await generateRulesetService.generateFeedRuleset(
+          body.query,
+        );
+        response = buildResponse(200, ruleset);
+      } catch (error) {
+        console.error("Error generating ruleset:", error);
+        response = buildResponse(500, { error: error.message });
+      }
+      break;
+    }
+
+    // POST /feeds/deploy
+    case method === "POST" && path === deployFeedPath: {
+      try {
+        const body = JSON.parse(event.body || "{}");
+        response = await feedsService.deployFeed(body);
+      } catch (error) {
+        console.error("Error deploying feed:", error);
+        response = buildResponse(500, { error: error.message });
+      }
+      break;
+    }
 
     // GET /feeds/{did}
     case method === "GET" && /^\/feeds\/[^/]+$/.test(path): {
@@ -62,7 +94,7 @@ exports.handler = async (event) => {
     }
 
     default:
-      response = util.buildResponse(404, { message: "404 not found" });
+      response = buildResponse(404, { message: "404 not found" });
   }
 
   return response;

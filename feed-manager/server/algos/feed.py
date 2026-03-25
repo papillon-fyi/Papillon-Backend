@@ -169,9 +169,7 @@ For regular terms, keep the search_terms the same as name.
             model="gpt-5-nano",
             messages=[{"role": "user", "content": llm_prompt}],
             response_format={ "type": "json" },
-            reasoning_effort= 'minimal',
-            temperature=0.5,
-            max_tokens=200,
+            reasoning_effort= "minimal"
         )
         
         result = json.loads(response.choices[0].message.content.strip())

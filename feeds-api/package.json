@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "description": "Papillon Feeds API for DynamoDB feed management",
   "dependencies": {
-    "aws-sdk": "^2.1313.0"
+    "aws-sdk": "^2.1313.0",
+    "axios": "^1.6.0",
+    "openai": "^4.0.0"
   }
 }

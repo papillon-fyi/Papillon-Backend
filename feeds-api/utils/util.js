@@ -1,14 +1,14 @@
-const buildResponse = (statusCode, body) => {
+function buildResponse(statusCode, body) {
   return {
-    statusCode: statusCode,
+    statusCode,
     headers: {
+      "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, x-api-key, Authorization",
-      "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
   };
-};
+}
 
-module.exports.buildResponse = buildResponse;
+module.exports = { buildResponse };

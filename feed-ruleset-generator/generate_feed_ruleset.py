@@ -197,9 +197,7 @@ async def generate_feed_ruleset(query: str) -> dict:
     response = openai.chat.completions.create(
         model="gpt-5-nano",
         messages=[{"role": "user", "content": llm_prompt}], response_format={ "type": "json" },
-        reasoning_effort= 'minimal',
-        temperature=0.5,
-        max_tokens=800,
+        reasoning_effort= "minimal",
     )
 
     raw_text = response.choices[0].message.content.strip()
