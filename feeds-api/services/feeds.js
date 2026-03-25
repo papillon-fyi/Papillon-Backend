@@ -283,13 +283,12 @@ const deployFeed = async (deployData) => {
 
     // Call feed-manager API to deploy the feed
     const feedManagerUrl =
-      process.env.FEED_MANAGER_URL ||
-      "https://papillon-feed-manager-ftzwl3vpfq-uc.a.run.app/manage-feed";
+      process.env.FEED_MANAGER_URL || "https://feeds.papillon.fyi/manage-feed";
 
     const feedManagerPayload = {
       handle,
       password,
-      hostname: `papillon-feed-manager-ftzwl3vpfq-uc.a.run.app/xrpc/app.bsky.feed.getFeedSkeleton`,
+      hostname: `feeds.papillon.fyi/xrpc/app.bsky.feed.getFeedSkeleton`,
       blueprint,
       access_jwt,
     };
