@@ -36,14 +36,15 @@ logging.basicConfig(level=logging.INFO)
 
 @app.on_event("startup")
 async def startup_event():
+    # Connect to database for caching only (FeedCache, SearchCache)
     db.connect(reuse_if_open=True)
-    db.create_tables([Feed, FeedSource, FeedCache, SearchCache], safe=True)
-    logging.info("Database tables created or verified.")
+    # Only create cache tables - Feed and FeedSource data now comes from feeds-api
+    db.create_tables([FeedCache, SearchCache], safe=True)
+    logging.info("Cache tables created or verified.")
     
-    # Load feeds into algos
-    for feed in Feed.select():
-        algos[feed.uri] = make_handler(feed.uri)
-    logging.info("Feeds loaded into algos.")
+    # Feeds are now loaded dynamically from feeds-api when requested
+    # No need to pre-load from SQLite - they'll be registered via /manage-feed
+    logging.info("Feed-manager ready. Feeds will be loaded dynamically from feeds-api.")
 
 
 # Routes
