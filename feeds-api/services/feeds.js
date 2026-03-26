@@ -414,9 +414,46 @@ function convertTuningsToBlueprint(tunings, feedName, feedDescription, prompt) {
   return blueprint;
 }
 
+/**
+ * Get feed by URI (for feed-manager to look up feeds)
+ */
+const getFeedByUri = async (feedUri) => {
+  if (!feedUri) {
+    return util.buildResponse(400, { message: "Feed URI is required" });
+  }
+
+  try {
+    // Scan all accounts to find the feed with this URI
+    const params = {
+      TableName: feedsTable,
+    };
+
+    const result = await dynamodb.scan(params).promise();
+
+    for (const account of result.Items) {
+      const feeds = account.feeds || {};
+      for (const [feedId, feedData] of Object.entries(feeds)) {
+        if (feedData.uri === feedUri) {
+          return util.buildResponse(200, {
+            did: account.did,
+            feedId: feedId,
+            ...feedData,
+          });
+        }
+      }
+    }
+
+    return util.buildResponse(404, { message: "Feed not found" });
+  } catch (error) {
+    console.error("Error getting feed by URI: ", error);
+    return util.buildResponse(500, { message: "Error getting feed by URI" });
+  }
+};
+
 module.exports = {
   getFeeds,
   getFeed,
+  getFeedByUri,
   updateRuleset,
   updateCache,
   initializeUser,

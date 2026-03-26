@@ -6,6 +6,7 @@ const healthPath = "/health";
 const feedsPath = "/feeds";
 const generateRulesetPath = "/feeds/generate-ruleset";
 const deployFeedPath = "/feeds/deploy";
+const feedByUriPath = "/feeds/by-uri";
 
 exports.handler = async (event) => {
   // Handle OPTIONS preflight
@@ -25,6 +26,23 @@ exports.handler = async (event) => {
     case method === "GET" && path === healthPath:
       response = buildResponse(200, { status: "healthy" });
       break;
+
+    // GET /feeds/by-uri?uri={feedUri}
+    case method === "GET" && path === feedByUriPath: {
+      try {
+        const feedUri =
+          event.queryStringParameters?.uri ||
+          event.queryStringParameters?.feedUri;
+        if (!feedUri) {
+          return buildResponse(400, { error: "uri parameter is required" });
+        }
+        response = await feedsService.getFeedByUri(feedUri);
+      } catch (error) {
+        console.error("Error getting feed by URI:", error);
+        response = buildResponse(500, { error: error.message });
+      }
+      break;
+    }
 
     // POST /feeds/generate-ruleset
     case method === "POST" && path === generateRulesetPath: {
